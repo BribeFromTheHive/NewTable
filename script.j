@@ -1,14 +1,14 @@
-library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 4.1.0.1.
-   
-    One map, one hashtable. Welcome to NewTable 4.1.0.1
-   
+library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 4.2.0.0
+ 
+    One map, one hashtable. Welcome to NewTable.
+ 
     This newest iteration of Table introduces the new HashTable struct.
     You can now instantiate HashTables which enables the use of large
     parent and large child keys, just like a standard hashtable. Previously,
     the user would have to instantiate a Table to do this on their own which -
     while doable - is something the user should not have to do if I can add it
     to this resource myself (especially if they are inexperienced).
-   
+ 
     This library was originally called NewTable so it didn't conflict with
     the API of Table by Vexorian. However, the damage is done and it's too
     late to change the library name now. To help with damage control, I
@@ -17,29 +17,29 @@ library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 
     the ".flush(integer)" method. I use ".flush()" to flush a child hash-
     table, because I wanted the API in NewTable to reflect the API of real
     hashtables (I thought this would be more intuitive).
-   
+ 
     API
-   
+ 
     ------------
     struct Table
     | static method create takes nothing returns Table
     |     create a new Table
-    |    
+    |
     | method destroy takes nothing returns nothing
     |     destroy it
-    |    
+    |
     | method flush takes nothing returns nothing
     |     flush all stored values inside of it
-    |    
+    |
     | method remove takes integer key returns nothing
     |     remove the value at index "key"
-    |    
+    |
     | method operator []= takes integer key, $TYPE$ value returns nothing
     |     assign "value" to index "key"
-    |    
+    |
     | method operator [] takes integer key returns $TYPE$
     |     load the value at index "key"
-    |    
+    |
     | method has takes integer key returns boolean
     |     whether or not the key was assigned
     |
@@ -60,17 +60,19 @@ library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 
     | method operator [] takes integer key returns Table
     |     returns a Table accessible exclusively to index "key"
 */
-   
+ 
 globals
+    private constant boolean TRACKED_HASHES = false //Set to True to allow the HashTable struct to remember its indexes
+ 
     private integer less = 0    //Index generation for TableArrays (below 0).
     private integer more = 8190 //Index generation for Tables.
     //Configure it if you use more than 8190 "key" variables in your map (this will never happen though).
-   
+ 
     private hashtable ht = InitHashtable()
     private key sizeK
     private key listK
 endglobals
-   
+ 
 private struct dex extends array
     static method operator size takes nothing returns Table
         return sizeK
@@ -79,8 +81,15 @@ private struct dex extends array
         return listK
     endmethod
 endstruct
-   
+ 
 private struct handles extends array
+    method operator []= takes integer key, handle h returns nothing
+        if h != null then
+            call SaveFogStateHandle(ht, this, key, ConvertFogState(GetHandleId(h)))
+        elseif HaveSavedHandle(ht, this, key) then
+            call RemoveSavedHandle(ht, this, key)
+        endif
+    endmethod
     method has takes integer key returns boolean
         return HaveSavedHandle(ht, this, key)
     endmethod
@@ -88,13 +97,13 @@ private struct handles extends array
         call RemoveSavedHandle(ht, this, key)
     endmethod
 endstruct
-   
+ 
 private struct agents extends array
     method operator []= takes integer key, agent value returns nothing
         call SaveAgentHandle(ht, this, key, value)
     endmethod
 endstruct
-   
+ 
 //! textmacro NEW_ARRAY_BASIC takes SUPER, FUNC, TYPE
 private struct $TYPE$s extends array
     method operator [] takes integer key returns $TYPE$
@@ -116,7 +125,7 @@ private module $TYPE$m
     endmethod
 endmodule
 //! endtextmacro
-   
+ 
 //! textmacro NEW_ARRAY takes FUNC, TYPE
 private struct $TYPE$s extends array
     method operator [] takes integer key returns $TYPE$
@@ -138,7 +147,7 @@ private module $TYPE$m
     endmethod
 endmodule
 //! endtextmacro
-   
+ 
 //Run these textmacros to include the entire hashtable API as wrappers.
 //Don't be intimidated by the number of macros - Vexorian's map optimizer is
 //supposed to kill functions which inline (all of these functions inline).
@@ -147,7 +156,7 @@ endmodule
 //! runtextmacro NEW_ARRAY_BASIC("String", "Str", "string")
 //New textmacro to allow table.integer[] syntax for compatibility with textmacros that might desire it.
 //! runtextmacro NEW_ARRAY_BASIC("Integer", "Integer", "integer")
-   
+ 
 //! runtextmacro NEW_ARRAY("Player", "player")
 //! runtextmacro NEW_ARRAY("Widget", "widget")
 //! runtextmacro NEW_ARRAY("Destructable", "destructable")
@@ -186,9 +195,9 @@ endmodule
 //! runtextmacro NEW_ARRAY("FogState", "fogstate")
 //! runtextmacro NEW_ARRAY("FogModifier", "fogmodifier")
 //! runtextmacro NEW_ARRAY("Hashtable", "hashtable")
-   
+ 
 struct Table extends array
-   
+ 
     // Implement modules for intuitive syntax (tb.handle; tb.unit; etc.)
     implement realm
     implement integerm
@@ -232,44 +241,44 @@ struct Table extends array
     implement fogstatem
     implement fogmodifierm
     implement hashtablem
-   
+ 
     method operator handle takes nothing returns handles
         return this
     endmethod
-   
+ 
     method operator agent takes nothing returns agents
         return this
     endmethod
-   
+ 
     //set this = tb[GetSpellAbilityId()]
     method operator [] takes integer key returns Table
         return LoadInteger(ht, this, key) //return this.integer[key]
     endmethod
-   
+ 
     //set tb[389034] = 8192
     method operator []= takes integer key, Table tb returns nothing
         call SaveInteger(ht, this, key, tb) //set this.integer[key] = tb
     endmethod
-   
+ 
     //set b = tb.has(2493223)
     method has takes integer key returns boolean
         return HaveSavedInteger(ht, this, key) //return this.integer.has(key)
     endmethod
-   
+ 
     //call tb.remove(294080)
     method remove takes integer key returns nothing
         call RemoveSavedInteger(ht, this, key) //call this.integer.remove(key)
     endmethod
-   
+ 
     //Remove all data from a Table instance
     method flush takes nothing returns nothing
         call FlushChildHashtable(ht, this)
     endmethod
-   
+ 
     //local Table tb = Table.create()
     static method create takes nothing returns Table
         local Table this = dex.list[0]
-       
+   
         if this == 0 then
             set this = more + 1
             set more = this
@@ -277,11 +286,11 @@ struct Table extends array
             set dex.list[0] = dex.list[this]
             call dex.list.remove(this) //Clear hashed memory
         endif
-       
+   
         debug set dex.list[this] = -1
         return this
     endmethod
-   
+ 
     // Removes all data from a Table instance and recycles its index.
     //
     //     call tb.destroy()
@@ -291,20 +300,20 @@ struct Table extends array
             debug call BJDebugMsg("Table Error: Tried to double-free instance: " + I2S(this))
             debug return
         debug endif
-       
+   
         call this.flush()
-       
+   
         set dex.list[this] = dex.list[0]
         set dex.list[0] = this
     endmethod
-   
+ 
     //! runtextmacro optional TABLE_BC_METHODS()
 endstruct
-   
+ 
 //! runtextmacro optional TABLE_BC_STRUCTS()
-   
+ 
 struct TableArray extends array
-   
+ 
     //Returns a new TableArray to do your bidding. Simply use:
     //
     //    local TableArray ta = TableArray[array_size]
@@ -312,12 +321,12 @@ struct TableArray extends array
     static method operator [] takes integer array_size returns TableArray
         local Table tb = dex.size[array_size] //Get the unique recycle list for this array size
         local TableArray this = tb[0]         //The last-destroyed TableArray that had this array size
-       
+   
         debug if array_size <= 0 then
             debug call BJDebugMsg("TypeError: Invalid specified TableArray size: " + I2S(array_size))
             debug return 0
         debug endif
-       
+   
         if this == 0 then
             set this = less - array_size
             set less = this
@@ -325,16 +334,16 @@ struct TableArray extends array
             set tb[0] = tb[this]  //Set the last destroyed to the last-last destroyed
             call tb.remove(this)  //Clear hashed memory
         endif
-       
+   
         set dex.size[this] = array_size //This remembers the array size
         return this
     endmethod
-   
+ 
     //Returns the size of the TableArray
     method operator size takes nothing returns integer
         return dex.size[this]
     endmethod
-   
+ 
     //This magic method enables two-dimensional[array][syntax] for Tables,
     //similar to the two-dimensional utility provided by hashtables them-
     //selves.
@@ -357,7 +366,7 @@ struct TableArray extends array
         endif
         return this + key
     endmethod
-   
+ 
     //Destroys a TableArray without flushing it; I assume you call .flush()
     //if you want it flushed too. This is a public method so that you don't
     //have to loop through all TableArray indices to flush them if you don't
@@ -365,27 +374,27 @@ struct TableArray extends array
     //
     method destroy takes nothing returns nothing
         local Table tb = dex.size[this.size]
-       
+   
         debug if this.size == 0 then
             debug call BJDebugMsg("TypeError: Tried to destroy an invalid TableArray: " + I2S(this))
             debug return
         debug endif
-       
+   
         if tb == 0 then
             //Create a Table to index recycled instances with their array size
             set tb = Table.create()
             set dex.size[this.size] = tb
         endif
-       
+   
         call dex.size.remove(this) //Clear the array size from hash memory
-       
+   
         set tb[this] = tb[0]
         set tb[0] = this
     endmethod
-   
+ 
     private static Table tempTable
     private static integer tempEnd
-   
+ 
     //Avoids hitting the op limit
     private static method clean takes nothing returns nothing
         local Table tb = .tempTable
@@ -402,7 +411,7 @@ struct TableArray extends array
             exitwhen tb == end
         endloop
     endmethod
-   
+ 
     //Flushes the TableArray and also destroys it. Doesn't get any more
     //similar to the FlushParentHashtable native than this.
     //
@@ -416,21 +425,42 @@ struct TableArray extends array
         call ForForce(bj_FORCE_PLAYER[0], function thistype.clean)
         call this.destroy()
     endmethod
-   
+ 
 endstruct
-   
-//NEW: Added in Table 4.0. A fairly simple struct but allows you to do more
+
+//Newly added in 4.2 - can automatically track HashTable indices.
+private module TRACKER
+    static if TRACKED_HASHES then
+        static HashTable tracker = 0
+        private static method onInit takes nothing returns nothing
+            set tracker = Table.create()
+        endmethod
+    endif
+endmodule
+ 
+//Added in Table 4.0. A fairly simple struct but allows you to do more
 //than that which was previously possible.
 struct HashTable extends array
+
+    implement TRACKER
 
     //Enables myHash[parentKey][childKey] syntax.
     //Basically, it creates a Table in the place of the parent key if
     //it didn't already get created earlier.
     method operator [] takes integer index returns Table
+        static if TRACKED_HASHES then
+            local integer i
+        endif
         local Table t = Table(this)[index]
         if t == 0 then
             set t = Table.create()
-            set Table(this)[index] = t //whoops! Forgot that line. I'm out of practice!
+            set Table(this)[index] = t
+            static if TRACKED_HASHES then
+                set t = tracker[this]
+                set i = t[0] + 1
+                set t[0] = i
+                set t[i] = index
+            endif
         endif
         return t
     endmethod
@@ -438,26 +468,63 @@ struct HashTable extends array
     //You need to call this on each parent key that you used if you
     //intend to destroy the HashTable or simply no longer need that key.
     method remove takes integer index returns nothing
+        static if TRACKED_HASHES then
+            local integer i
+            local integer j
+        endif
         local Table t = Table(this)[index]
         if t != 0 then
-            call t.destroy()
-            call Table(this).remove(index)
+            call t.destroy()               //clear indexed table
+            call Table(this).remove(index) //clear reference to that table
+            static if TRACKED_HASHES then
+                set t = tracker[this]
+                set i = 0
+                loop
+                    set i = i + 1
+                    exitwhen t[i] == index //removal is o(n) based
+                endloop
+                set j = t[0]
+                if i < j then
+                    set t[i] = t[j] //pop last item in the stack and insert in place of this removed item
+                endif
+                call t.remove(j) //free reference to the index
+                set t[0] = j - 1 //decrease size of stack
+            endif
         endif
     endmethod
-   
+ 
     //Added in version 4.1
     method has takes integer index returns boolean
         return Table(this).has(index)
     endmethod
-   
-    //HashTables are just fancy Table indices.
+ 
+    //HashTables are mostly just fancy Table indices.
     method destroy takes nothing returns nothing
+        static if TRACKED_HASHES then
+            local Table t = tracker[this] //tracker table
+            local Table t2                //sub-tables of the primary HashTable
+            local integer i = t[0]
+            loop
+                exitwhen i == 0
+                set t2 = t[i]
+                call t2.destroy()           //clear indexed sub-table
+                call Table(this).remove(t2) //clear reference to sub-table
+                set i = i - 1
+            endloop
+            call t.destroy()           //clear indexed tracker table
+            call Table(t).remove(this) //clear reference to tracker table
+        endif
         call Table(this).destroy()
     endmethod
-   
-    //Like I said above...
+ 
     static method create takes nothing returns thistype
-        return Table.create()
+        static if TRACKED_HASHES then
+            local HashTable ht = Table.create()
+            set tracker[ht][0] = 0
+            return ht
+        else
+            return Table.create()
+        endif
     endmethod
 
 endstruct
