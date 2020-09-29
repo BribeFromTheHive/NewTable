@@ -1,22 +1,11 @@
-library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 4.2.0.0
+library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 5.0.0.0
  
     One map, one hashtable. Welcome to NewTable.
  
-    This newest iteration of Table introduces the new HashTable struct.
-    You can now instantiate HashTables which enables the use of large
-    parent and large child keys, just like a standard hashtable. Previously,
-    the user would have to instantiate a Table to do this on their own which -
-    while doable - is something the user should not have to do if I can add it
-    to this resource myself (especially if they are inexperienced).
- 
-    This library was originally called NewTable so it didn't conflict with
-    the API of Table by Vexorian. However, the damage is done and it's too
-    late to change the library name now. To help with damage control, I
-    have provided an extension library called TableBC, which bridges all
-    the functionality of Vexorian's Table except for 2-D string arrays &
-    the ".flush(integer)" method. I use ".flush()" to flush a child hash-
-    table, because I wanted the API in NewTable to reflect the API of real
-    hashtables (I thought this would be more intuitive).
+    This latest version of Table introduces a new struct: HashTableEx.
+    This behaves like a HashTable but has some additional functionality
+    such as storing each saved index in order to allow iteration and
+    automatic destruction.
  
     API
  
@@ -62,8 +51,6 @@ library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 
 */
  
 globals
-    private constant boolean TRACKED_HASHES = false //Set to True to allow the HashTable struct to remember its indexes
- 
     private integer less = 0    //Index generation for TableArrays (below 0).
     private integer more = 8190 //Index generation for Tables.
     //Configure it if you use more than 8190 "key" variables in your map (this will never happen though).
@@ -427,40 +414,19 @@ struct TableArray extends array
     endmethod
  
 endstruct
-
-//Newly added in 4.2 - can automatically track HashTable indices.
-private module TRACKER
-    static if TRACKED_HASHES then
-        static HashTable tracker = 0
-        private static method onInit takes nothing returns nothing
-            set tracker = Table.create()
-        endmethod
-    endif
-endmodule
  
 //Added in Table 4.0. A fairly simple struct but allows you to do more
 //than that which was previously possible.
 struct HashTable extends array
 
-    implement TRACKER
-
     //Enables myHash[parentKey][childKey] syntax.
     //Basically, it creates a Table in the place of the parent key if
     //it didn't already get created earlier.
     method operator [] takes integer index returns Table
-        static if TRACKED_HASHES then
-            local integer i
-        endif
         local Table t = Table(this)[index]
         if t == 0 then
             set t = Table.create()
             set Table(this)[index] = t
-            static if TRACKED_HASHES then
-                set t = tracker[this]
-                set i = t[0] + 1
-                set t[0] = i
-                set t[i] = index
-            endif
         endif
         return t
     endmethod
@@ -468,28 +434,10 @@ struct HashTable extends array
     //You need to call this on each parent key that you used if you
     //intend to destroy the HashTable or simply no longer need that key.
     method remove takes integer index returns nothing
-        static if TRACKED_HASHES then
-            local integer i
-            local integer j
-        endif
         local Table t = Table(this)[index]
         if t != 0 then
             call t.destroy()               //clear indexed table
             call Table(this).remove(index) //clear reference to that table
-            static if TRACKED_HASHES then
-                set t = tracker[this]
-                set i = 0
-                loop
-                    set i = i + 1
-                    exitwhen t[i] == index //removal is o(n) based
-                endloop
-                set j = t[0]
-                if i < j then
-                    set t[i] = t[j] //pop last item in the stack and insert in place of this removed item
-                endif
-                call t.remove(j) //free reference to the index
-                set t[0] = j - 1 //decrease size of stack
-            endif
         endif
     endmethod
  
@@ -500,31 +448,95 @@ struct HashTable extends array
  
     //HashTables are mostly just fancy Table indices.
     method destroy takes nothing returns nothing
-        static if TRACKED_HASHES then
-            local Table t = tracker[this] //tracker table
-            local Table t2                //sub-tables of the primary HashTable
-            local integer i = t[0]
-            loop
-                exitwhen i == 0
-                set t2 = t[i]
-                call t2.destroy()           //clear indexed sub-table
-                call Table(this).remove(t2) //clear reference to sub-table
-                set i = i - 1
-            endloop
-            call t.destroy()           //clear indexed tracker table
-            call Table(t).remove(this) //clear reference to tracker table
-        endif
         call Table(this).destroy()
     endmethod
  
     static method create takes nothing returns thistype
-        static if TRACKED_HASHES then
-            local HashTable ht = Table.create()
-            set tracker[ht][0] = 0
-            return ht
-        else
-            return Table.create()
+        return Table.create()
+    endmethod
+
+endstruct
+
+//Added in Table 5.0. Similar to the HashTable struct but with the
+//ability to log each value saved into the HashTable to automate
+//deallocation.
+private module TRACKER
+    static thistype tracker = 0
+    private static method onInit takes nothing returns nothing
+        set tracker = Table.create()
+    endmethod
+endmodule
+struct HashTableEx extends array
+
+    implement TRACKER
+
+    method operator [] takes integer index returns Table
+        local integer i
+        local Table t = Table(this)[index]
+        if t == 0 then
+            set t = Table.create()
+            set Table(this)[index] = t
+            set t = tracker[this]          //get the tracking table's index for this HashTable     
+            set i = t[0] + 1               //increase its size
+            set t[0] = i                   //save that size
+            set t[i] = index               //index the user's index to the tracker's slot at 'size'
         endif
+        return t
+    endmethod
+
+    //Extremely inefficient, but gets the job done if needed.
+    method remove takes integer index returns nothing
+        local integer i
+        local integer j
+        local Table t = Table(this)[index]
+        if t != 0 then
+            call t.destroy()               //clear indexed table
+            call Table(this).remove(index) //clear reference to that table
+            set t = tracker[this]
+            set i = t[0]
+            set j = i
+            loop
+                exitwhen t[i] == index //removal is o(n) based
+                set i = i - 1
+            endloop
+            if i < j then
+                set t[i] = t[j] //pop last item in the stack and insert in place of this removed item
+            endif
+            call t.remove(j) //free reference to the index
+            set t[0] = j - 1 //decrease size of stack
+        endif
+    endmethod
+ 
+    method has takes integer index returns boolean
+        return Table(this).has(index)
+    endmethod
+    
+    //Useful for debugging purposes I suppose.
+    //Treats the HashTable like a TableArray when used instead of [].
+    method getIndex takes integer i returns Table
+        return tracker[this][i]
+    endmethod
+    
+    method destroy takes nothing returns nothing
+        local Table t = tracker[this] //tracker table
+        local Table t2                //sub-tables of the primary HashTable
+        local integer i = t[0]        //get the number of tracked indices
+        loop
+            exitwhen i == 0
+            set t2 = t[i]
+            call t2.destroy()           //clear indexed sub-table
+            call Table(this).remove(t2) //clear reference to sub-table
+            set i = i - 1
+        endloop
+        call t.destroy()           //clear tracking sub-table
+        call tracker.remove(this)  //clear reference to that table
+        call Table(this).destroy()
+    endmethod
+ 
+    static method create takes nothing returns thistype
+        local thistype this = Table.create()
+        set tracker[this][0] = 0
+        return this
     endmethod
 
 endstruct
