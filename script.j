@@ -1,14 +1,19 @@
-library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 5.0.0.0
- 
+library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 5.1.0.0
+
     One map, one hashtable. Welcome to NewTable.
- 
-    This latest version of Table introduces a new struct: HashTableEx.
-    This behaves like a HashTable but has some additional functionality
-    such as storing each saved index in order to allow iteration and
-    automatic destruction.
- 
+
+    This latest version of Table introduces the following API:
+    Table2D (the new alias for the HashTable struct)
+    Table2DT (the new alias for the HashTableEx struct)
+    Table3D, Table4D and Table 5D.
+
+    More N-dimensional tables can be quickly generated if needed. Scroll to the
+    bottom of this script to find the textmacro TableXD.
+
+    Special thanks to @emperor_d3st for the inspiration for this update.
+
     API
- 
+
     ------------
     struct Table
     | static method create takes nothing returns Table
@@ -49,31 +54,25 @@ library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 
     | method operator [] takes integer key returns Table
     |     returns a Table accessible exclusively to index "key"
 */
- 
+
 globals
-    private integer less = 0    //Index generation for TableArrays (below 0).
-    private integer more = 8190 //Index generation for Tables.
-    //Configure it if you use more than 8190 "key" variables in your map (this will never happen though).
- 
-    private hashtable ht = InitHashtable()
-    private key sizeK
-    private key listK
+    private integer tableIDGenerator = 8190  //Index generation for Tables starts from here. Configure it if your map contains more than this many structs or 'key' objects.
+
+    private hashtable ht = InitHashtable() // The last hashtable.
+
+    private constant boolean TEST = true       // set to `true` to enable error messages and `print`/`toString` API.
+    private constant boolean DEEP_TEST = false // set to `true` to enable informational messages.
+
+    private keyword instanceData
 endglobals
- 
-private struct dex extends array
-    static method operator size takes nothing returns Table
-        return sizeK
-    endmethod
-    static method operator list takes nothing returns Table
-        return listK
-    endmethod
-endstruct
- 
+
 private struct handles extends array
     method operator []= takes integer key, handle h returns nothing
         if h != null then
+            // "But I need hashtables to typecast generic handles into ..." - say no more. I got u fam.
             call SaveFogStateHandle(ht, this, key, ConvertFogState(GetHandleId(h)))
         elseif HaveSavedHandle(ht, this, key) then
+            // table.handle[key] = null becomes an alias for table.handle.remove(key)
             call RemoveSavedHandle(ht, this, key)
         endif
     endmethod
@@ -84,13 +83,13 @@ private struct handles extends array
         call RemoveSavedHandle(ht, this, key)
     endmethod
 endstruct
- 
+
 private struct agents extends array
     method operator []= takes integer key, agent value returns nothing
         call SaveAgentHandle(ht, this, key, value)
     endmethod
 endstruct
- 
+
 //! textmacro NEW_ARRAY_BASIC takes SUPER, FUNC, TYPE
 private struct $TYPE$s extends array
     method operator [] takes integer key returns $TYPE$
@@ -112,7 +111,7 @@ private module $TYPE$m
     endmethod
 endmodule
 //! endtextmacro
- 
+
 //! textmacro NEW_ARRAY takes FUNC, TYPE
 private struct $TYPE$s extends array
     method operator [] takes integer key returns $TYPE$
@@ -134,16 +133,23 @@ private module $TYPE$m
     endmethod
 endmodule
 //! endtextmacro
- 
+
+/*
+    Create API for stuff like:
+        set table.unit[key] = GetTriggerUnit()
+        local boolean b = table.handle.has(key)
+        local unit u = table.unit[key]
+        set table.handle.remove(key)
+*/
+
 //Run these textmacros to include the entire hashtable API as wrappers.
 //Don't be intimidated by the number of macros - Vexorian's map optimizer is
 //supposed to kill functions which inline (all of these functions inline).
 //! runtextmacro NEW_ARRAY_BASIC("Real", "Real", "real")
 //! runtextmacro NEW_ARRAY_BASIC("Boolean", "Boolean", "boolean")
 //! runtextmacro NEW_ARRAY_BASIC("String", "Str", "string")
-//New textmacro to allow table.integer[] syntax for compatibility with textmacros that might desire it.
 //! runtextmacro NEW_ARRAY_BASIC("Integer", "Integer", "integer")
- 
+
 //! runtextmacro NEW_ARRAY("Player", "player")
 //! runtextmacro NEW_ARRAY("Widget", "widget")
 //! runtextmacro NEW_ARRAY("Destructable", "destructable")
@@ -182,10 +188,12 @@ endmodule
 //! runtextmacro NEW_ARRAY("FogState", "fogstate")
 //! runtextmacro NEW_ARRAY("FogModifier", "fogmodifier")
 //! runtextmacro NEW_ARRAY("Hashtable", "hashtable")
- 
+
 struct Table extends array
- 
-    // Implement modules for intuitive syntax (tb.handle; tb.unit; etc.)
+
+    static Table instanceData = thistype.typeid
+
+    // Implement modules for handle/agent/integer/real/boolean/string/etc syntax.
     implement realm
     implement integerm
     implement booleanm
@@ -228,109 +236,118 @@ struct Table extends array
     implement fogstatem
     implement fogmodifierm
     implement hashtablem
- 
+
     method operator handle takes nothing returns handles
         return this
     endmethod
- 
+
     method operator agent takes nothing returns agents
         return this
     endmethod
- 
-    //set this = tb[GetSpellAbilityId()]
+
     method operator [] takes integer key returns Table
-        return LoadInteger(ht, this, key) //return this.integer[key]
+        return this.integer[key]
     endmethod
- 
-    //set tb[389034] = 8192
-    method operator []= takes integer key, Table tb returns nothing
-        call SaveInteger(ht, this, key, tb) //set this.integer[key] = tb
+
+    method operator []= takes integer key, Table tab returns nothing
+        set this.integer[key] = tab
     endmethod
- 
-    //set b = tb.has(2493223)
+
     method has takes integer key returns boolean
-        return HaveSavedInteger(ht, this, key) //return this.integer.has(key)
+        return this.integer.has(key)
     endmethod
- 
-    //call tb.remove(294080)
+
     method remove takes integer key returns nothing
-        call RemoveSavedInteger(ht, this, key) //call this.integer.remove(key)
+        call this.integer.remove(key)
     endmethod
- 
-    //Remove all data from a Table instance
+
+    // Remove all keys and values from a Table instance
     method flush takes nothing returns nothing
         call FlushChildHashtable(ht, this)
     endmethod
- 
-    //local Table tb = Table.create()
+
+    // Returns a new Table instance that can store any hashtable-compatible data types.
     static method create takes nothing returns Table
-        local Table this = dex.list[0]
-   
+        local Table this = instanceData[0]
+
         if this == 0 then
-            set this = more + 1
-            set more = this
+            set this = tableIDGenerator + 1
+            set tableIDGenerator = this
+            static if DEEP_TEST then
+                call BJDebugMsg("Creating Table: " + I2S(this))
+            endif
         else
-            set dex.list[0] = dex.list[this]
-            call dex.list.remove(this) //Clear hashed memory
+            set instanceData[0] = instanceData[this]
+            static if DEEP_TEST then
+                call BJDebugMsg("Re-using Table: " + I2S(this))
+            endif
         endif
-   
-        debug set dex.list[this] = -1
+
+        set instanceData[this] = -1
         return this
     endmethod
- 
+
     // Removes all data from a Table instance and recycles its index.
-    //
-    //     call tb.destroy()
-    //
     method destroy takes nothing returns nothing
-        debug if dex.list[this] != -1 then
-            debug call BJDebugMsg("Table Error: Tried to double-free instance: " + I2S(this))
-            debug return
-        debug endif
-   
-        call this.flush()
-   
-        set dex.list[this] = dex.list[0]
-        set dex.list[0] = this
+        call flush()
+
+        if instanceData[this] != -1 then
+            static if TEST then
+                call BJDebugMsg("Table Error: Tried to double-free instance: " + I2S(this))
+            endif
+            return
+        endif
+
+        static if DEEP_TEST then
+            call BJDebugMsg("Destroying Table: " + I2S(this))
+        endif
+
+        set instanceData[this] = instanceData[0]
+        set instanceData[0] = this
     endmethod
- 
+
     //! runtextmacro optional TABLE_BC_METHODS()
 endstruct
- 
+
 //! runtextmacro optional TABLE_BC_STRUCTS()
- 
+
 struct TableArray extends array
- 
+
+    private static integer keyGen = 0
+    private static Table arraySizes = thistype.typeid
+
     //Returns a new TableArray to do your bidding. Simply use:
     //
     //    local TableArray ta = TableArray[array_size]
     //
     static method operator [] takes integer array_size returns TableArray
-        local Table tb = dex.size[array_size] //Get the unique recycle list for this array size
-        local TableArray this = tb[0]         //The last-destroyed TableArray that had this array size
-   
-        debug if array_size <= 0 then
-            debug call BJDebugMsg("TypeError: Invalid specified TableArray size: " + I2S(array_size))
-            debug return 0
-        debug endif
-   
-        if this == 0 then
-            set this = less - array_size
-            set less = this
-        else
-            set tb[0] = tb[this]  //Set the last destroyed to the last-last destroyed
-            call tb.remove(this)  //Clear hashed memory
+        local Table recycleList = arraySizes[array_size] //Get the unique recycle list for this array size
+        local TableArray this = recycleList[0]           //The last-destroyed TableArray that had this array size
+
+        if array_size <= 0 then
+            static if TEST then
+                call BJDebugMsg("TypeError: Invalid specified TableArray size: " + I2S(array_size))
+            endif
+            return 0
         endif
-   
-        set dex.size[this] = array_size //This remembers the array size
+
+        if this == 0 then
+            set this = keyGen - array_size
+            set keyGen = this
+        else
+            set recycleList[0] = recycleList[this]  //Set the last destroyed to the last-last destroyed
+            call recycleList.remove(this)  //Clear hashed memory
+        endif
+
+        set arraySizes[this] = array_size
         return this
     endmethod
- 
+
     //Returns the size of the TableArray
     method operator size takes nothing returns integer
-        return dex.size[this]
+        return arraySizes[this]
     endmethod
- 
+
     //This magic method enables two-dimensional[array][syntax] for Tables,
     //similar to the two-dimensional utility provided by hashtables them-
     //selves.
@@ -338,11 +355,11 @@ struct TableArray extends array
     //ta[integer a].unit[integer b] = unit u
     //ta[integer a][integer c] = integer d
     //
-    //Inline-friendly when not running in debug mode
+    //Inline-friendly when not running in `TEST` mode
     //
     method operator [] takes integer key returns Table
-        static if DEBUG_MODE then
-            local integer i = this.size
+        static if TEST then
+            local integer i = size
             if i == 0 then
                 call BJDebugMsg("IndexError: Tried to get key from invalid TableArray instance: " + I2S(this))
                 return 0
@@ -353,192 +370,349 @@ struct TableArray extends array
         endif
         return this + key
     endmethod
- 
+
     //Destroys a TableArray without flushing it; I assume you call .flush()
     //if you want it flushed too. This is a public method so that you don't
     //have to loop through all TableArray indices to flush them if you don't
     //need to (ie. if you were flushing all child-keys as you used them).
     //
     method destroy takes nothing returns nothing
-        local Table tb = dex.size[this.size]
-   
-        debug if this.size == 0 then
-            debug call BJDebugMsg("TypeError: Tried to destroy an invalid TableArray: " + I2S(this))
-            debug return
-        debug endif
-   
-        if tb == 0 then
-            //Create a Table to index recycled instances with their array size
-            set tb = Table.create()
-            set dex.size[this.size] = tb
+        local Table recycleList = arraySizes[size]
+
+        if size == 0 then
+            static if TEST then
+                call BJDebugMsg("TypeError: Tried to destroy an invalid TableArray: " + I2S(this))
+            endif
+            return
         endif
-   
-        call dex.size.remove(this) //Clear the array size from hash memory
-   
-        set tb[this] = tb[0]
-        set tb[0] = this
+
+        if recycleList == 0 then
+            //Create a Table to index recycled instances with their array size
+            set recycleList = Table.create()
+            set arraySizes[size] = recycleList
+        endif
+
+        call arraySizes.remove(this) //Clear the array size from hash memory
+
+        set recycleList[this] = recycleList[0]
+        set recycleList[0] = this
     endmethod
- 
+
     private static Table tempTable
     private static integer tempEnd
- 
+
     //Avoids hitting the op limit
     private static method clean takes nothing returns nothing
-        local Table tb = .tempTable
-        local integer end = tb + 0x1000
-        if end < .tempEnd then
-            set .tempTable = end
+        local Table tab = tempTable
+        local integer end = tab + 0x1000
+        if end < tempEnd then
+            set tempTable = end
             call ForForce(bj_FORCE_PLAYER[0], function thistype.clean)
         else
-            set end = .tempEnd
+            set end = tempEnd
         endif
         loop
-            call tb.flush()
-            set tb = tb + 1
-            exitwhen tb == end
+            call tab.flush()
+            set tab = tab + 1
+            exitwhen tab == end
         endloop
     endmethod
- 
+
     //Flushes the TableArray and also destroys it. Doesn't get any more
     //similar to the FlushParentHashtable native than this.
-    //
     method flush takes nothing returns nothing
-        debug if this.size == 0 then
-            debug call BJDebugMsg("TypeError: Tried to flush an invalid TableArray instance: " + I2S(this))
-            debug return
-        debug endif
-        set .tempTable = this
-        set .tempEnd = this + this.size
+        if size == 0 then
+            static if TEST then
+                call BJDebugMsg("TypeError: Tried to flush an invalid TableArray instance: " + I2S(this))
+            endif
+            return
+        endif
+        set tempTable = this
+        set tempEnd = this + size
         call ForForce(bj_FORCE_PLAYER[0], function thistype.clean)
-        call this.destroy()
+        call destroy()
     endmethod
- 
+
 endstruct
- 
-//Added in Table 4.0. A fairly simple struct but allows you to do more
-//than that which was previously possible.
-struct HashTable extends array
+
+// Added in version 4.0, renamed from HashTable to Table2D in 5.1.
+struct Table2D extends array
 
     //Enables myHash[parentKey][childKey] syntax.
     //Basically, it creates a Table in the place of the parent key if
     //it didn't already get created earlier.
     method operator [] takes integer index returns Table
-        local Table t = Table(this)[index]
-        if t == 0 then
-            set t = Table.create()
-            set Table(this)[index] = t
+        local Table tab = Table(this)[index]
+        if tab == 0 then
+            set tab = Table.create()
+            set Table(this)[index] = tab
         endif
-        return t
+        return tab
     endmethod
 
     //You need to call this on each parent key that you used if you
-    //intend to destroy the HashTable or simply no longer need that key.
+    //intend to destroy the Table2D or simply no longer need that key.
     method remove takes integer index returns nothing
-        local Table t = Table(this)[index]
-        if t != 0 then
-            call t.destroy()               //clear indexed table
-            call Table(this).remove(index) //clear reference to that table
+        local Table tab = Table(this)[index]
+        if tab != 0 then
+            call Table(this).remove(index)
+            if Table.instanceData[tab] == -1 then
+                call tab.destroy()
+            else
+                static if TEST then
+                    call BJDebugMsg("Table2D Error: Inactive Table " + I2S(tab) + " used as key of Table2D " + I2S(this) + " at index " + I2S(index))
+                endif
+            endif
+        else
+            static if TEST then
+                call BJDebugMsg("Table2D Warning: " + I2S(tab) + " does not contain anything at index " + I2S(index))
+            endif
         endif
     endmethod
- 
-    //Added in version 4.1
+
     method has takes integer index returns boolean
         return Table(this).has(index)
     endmethod
- 
-    //HashTables are mostly just fancy Table indices.
+
     method destroy takes nothing returns nothing
         call Table(this).destroy()
     endmethod
- 
+
     static method create takes nothing returns thistype
         return Table.create()
     endmethod
 
 endstruct
 
-//Added in Table 5.0. Similar to the HashTable struct but with the
-//ability to log each value saved into the HashTable to automate
-//deallocation.
-private module TRACKER
-    static thistype tracker = 0
-    private static method onInit takes nothing returns nothing
-        set tracker = Table.create()
-    endmethod
-endmodule
-struct HashTableEx extends array
+// Added in Table 5.0. Similar to the Table2D struct, but with the
+// ability to log each value saved into the Table2DT to automate
+// deallocation.
+struct Table2DT extends array
 
-    implement TRACKER
+    private static Table2D tracker = Table2D.typeid
+    private static Table seenTables = thistype.typeid
 
     method operator [] takes integer index returns Table
         local integer i
-        local Table t = Table(this)[index]
-        if t == 0 then
-            set t = Table.create()
-            set Table(this)[index] = t
-            set t = tracker[this]          //get the tracking table's index for this HashTable     
-            set i = t[0] + 1               //increase its size
-            set t[0] = i                   //save that size
-            set t[i] = index               //index the user's index to the tracker's slot at 'size'
+        local Table innerTable = Table(this)[index]
+        local Table trackingTable
+
+        if innerTable == 0 then
+            // If this key was never referenced before, create a table to handle this depth:
+            set innerTable = Table.create()
+            set Table(this)[index] = innerTable
+
+            set trackingTable = tracker[this]          //get the tracking table
+            set i = trackingTable[0] + 1               //increase its size
+            set trackingTable[0] = i                   //save that size
+            set trackingTable[i] = index               //index the user's index to the tracker's slot at 'size'
+            static if DEEP_TEST then
+                call BJDebugMsg("Increasing tracked table size to " + I2S(i))
+            endif
         endif
-        return t
+        static if DEEP_TEST then
+            call BJDebugMsg("Tracked-Table(" + I2S(this) + ")[" + I2S(index) + "] => " + I2S(innerTable))
+        endif
+        return innerTable
+    endmethod
+
+    method has takes integer index returns boolean
+        return Table(this).has(index)
+    endmethod
+
+    private method flushAndDestroy takes nothing returns nothing
+        local Table trackTable = tracker[this]
+        local integer i = trackTable[0] //get the number of tracked indices
+        local Table tab
+        local integer tableStatus
+
+        // Mark this table as seen to avoid potentially-infinite recursion
+        set seenTables.boolean[this] = true
+
+        loop
+            exitwhen i == 0
+            set tab = Table(this)[trackTable[i]] // Get the actual table using the index from trackTable
+            if tab != 0 then
+                if Table.instanceData[tab] == -1 then
+                    if tracker.has(tab) and not seenTables.boolean[tab] then
+                        call thistype(tab).flushAndDestroy()
+                    else
+                        call tab.destroy()
+                    endif
+                endif
+            endif
+            set i = i - 1
+        endloop
+
+        // Now destroy the tracking table and the table itself
+        call trackTable.destroy()  //clear tracking sub-table
+        call Table(tracker).remove(this)  //clear reference to that table
+        call Table(this).destroy()
+    endmethod
+
+    method destroy takes nothing returns nothing
+        if Table.instanceData[this] != -1 then
+            static if TEST then
+                call BJDebugMsg("Table2DT Error: Tried to double-free: " + I2S(this))
+            endif
+            return
+        endif
+        call flushAndDestroy()
+        call seenTables.flush()
     endmethod
 
     //Extremely inefficient, but gets the job done if needed.
     method remove takes integer index returns nothing
         local integer i
         local integer j
-        local Table t = Table(this)[index]
-        if t != 0 then
-            call t.destroy()               //clear indexed table
-            call Table(this).remove(index) //clear reference to that table
-            set t = tracker[this]
-            set i = t[0]
-            set j = i
-            loop
-                exitwhen t[i] == index //removal is o(n) based
-                set i = i - 1
-            endloop
-            if i < j then
-                set t[i] = t[j] //pop last item in the stack and insert in place of this removed item
+        local Table innerTable = Table(this)[index]
+        local Table trackingTable = tracker[this]
+        if Table.instanceData[this] != -1 then
+            static if TEST then
+                call BJDebugMsg("Table2DT Error: Tried to remove index " + I2S(index) + " from destroyed Tracked-Table(" + I2S(this) + ")")
             endif
-            call t.remove(j) //free reference to the index
-            set t[0] = j - 1 //decrease size of stack
         endif
-    endmethod
- 
-    method has takes integer index returns boolean
-        return Table(this).has(index)
-    endmethod
-    
-    //Useful for debugging purposes I suppose.
-    //Treats the HashTable like a TableArray when used instead of [].
-    method getIndex takes integer i returns Table
-        return tracker[this][i]
-    endmethod
-    
-    method destroy takes nothing returns nothing
-        local Table t = tracker[this] //tracker table
-        local Table t2                //sub-tables of the primary HashTable
-        local integer i = t[0]        //get the number of tracked indices
+        if innerTable == 0 then
+            static if TEST then
+                call BJDebugMsg("Table2DT Error: " + I2S(this) + " does not have any indices to remove, so could not remove: " + I2S(index))
+            endif
+            return
+        endif
+        call Table(this).remove(index)
+        if Table.instanceData[innerTable] != -1 then
+            static if TEST then
+                call BJDebugMsg("Table2DT Error: " + I2S(this) + " contains destroyed table " + I2S(innerTable) + " at key: " + I2S(index))
+            endif
+            return
+        endif
+        if tracker.has(innerTable) then
+            call thistype(innerTable).destroy()
+        else
+            call innerTable.destroy()
+        endif
+        set i = trackingTable[0]
+        set j = i
         loop
-            exitwhen i == 0
-            set t2 = t[i]
-            call t2.destroy()           //clear indexed sub-table
-            call Table(this).remove(t2) //clear reference to sub-table
+            if (i == 0) then
+                static if TEST then
+                    call BJDebugMsg("Table2DT Error: Tried to remove index: " + I2S(index) + " which does not exist in " + I2S(this))
+                endif
+                return
+            endif
+            exitwhen trackingTable[i] == index //removal is o(n) based
             set i = i - 1
         endloop
-        call t.destroy()           //clear tracking sub-table
-        call tracker.remove(this)  //clear reference to that table
-        call Table(this).destroy()
+        if i < j then
+            set trackingTable[i] = trackingTable[j] //pop last item in the stack and insert in place of this removed item
+        endif
+        call trackingTable.remove(j) //free reference to the index
+        set trackingTable[0] = j - 1 //decrease size of stack
     endmethod
- 
+
     static method create takes nothing returns thistype
         local thistype this = Table.create()
         set tracker[this][0] = 0
         return this
     endmethod
 
+    static if TEST then
+        private method toStringFn takes integer depth returns string
+            local Table trackTable = Table(tracker)[this]
+            local integer i = trackTable[0]
+            local thistype tab
+            local string indent = ""
+            local integer k = 0
+            local string output
+            local integer index
+            local integer data
+
+            // Determine if this is a tracked table and if it's already been seen
+            if trackTable != 0 then
+                if seenTables.boolean[this] then
+                    return "Tracked-Table(" + I2S(this) + ")"
+                endif
+                set seenTables.boolean[this] = true
+                if i == 0 then
+                    return "Tracked-Table(" + I2S(this) + ")[-]"
+                endif
+                set output = "Tracked-Table(" + I2S(this) + ")["
+            else
+                set data = Table.instanceData[this]
+                if data == -1 then
+                    return "Table(" + I2S(this) + ")[?]"
+                elseif data > 0 then
+                    return "DESTROYED Table(" + I2S(this) + ")"
+                else
+                    return I2S(this)
+                endif
+            endif
+
+            loop
+                exitwhen k == depth
+                set indent = indent + "  "
+                set k = k + 1
+            endloop
+
+            loop
+                exitwhen i == 0
+                set index = trackTable[i]
+                set tab = Table(this)[index]
+
+                set output = output + "\n" + indent + "  [" + thistype(index).toStringFn(depth) + "] = " + thistype(tab).toStringFn(depth + 1)
+                set i = i - 1
+            endloop
+
+            return output + "\n" + indent + "]"
+        endmethod
+
+        method toString takes nothing returns string
+            local string result = toStringFn(0)
+            call seenTables.flush()
+            return result
+        endmethod
+
+        method print takes nothing returns nothing
+            call BJDebugMsg(toString())
+        endmethod
+    endif
+
 endstruct
+
+//! textmacro TableXD takes NAME, SPEEDY_OR_TRACKED, MAP_TO_WHAT
+struct $NAME$ extends array
+    method operator [] takes integer index returns $MAP_TO_WHAT$
+        return $SPEEDY_OR_TRACKED$(this)[index]
+    endmethod
+
+    method remove takes integer index returns nothing
+        call $SPEEDY_OR_TRACKED$(this).remove(index)
+    endmethod
+
+    method has takes integer index returns boolean
+        return Table(this).has(index)
+    endmethod
+
+    method destroy takes nothing returns nothing
+        call $SPEEDY_OR_TRACKED$(this).destroy()
+    endmethod
+
+    static method create takes nothing returns thistype
+        return $SPEEDY_OR_TRACKED$.create()
+    endmethod
+endstruct
+//! endtextmacro
+
+// Comment-out any of these if you don't need them. Note that the optimizer will inline alias methods.
+//! runtextmacro TableXD("Table3D", "Table2D", "Table2D")
+//! runtextmacro TableXD("Table4D", "Table2D", "Table3D")
+//! runtextmacro TableXD("Table5D", "Table2D", "Table4D")
+
+//! runtextmacro TableXD("Table3DT", "Table2DT", "Table2DT")
+//! runtextmacro TableXD("Table4DT", "Table2DT", "Table3DT")
+//! runtextmacro TableXD("Table5DT", "Table2DT", "Table4DT")
+
+// Run these to support backwards-compatibility. Comment-out if you don't need them.
+//! runtextmacro TableXD("HashTable", "Table2D", "Table")
+//! runtextmacro TableXD("HashTableEx", "Table2DT", "Table")
 
 endlibrary
