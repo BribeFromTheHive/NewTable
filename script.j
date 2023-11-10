@@ -152,9 +152,7 @@ globals
 
     private hashtable hashTable = InitHashtable() // The last hashtable.
 
-    private constant boolean TRACK_KEYS = true // set to `false` if you do not wish for any automatic tracking of keys inside of Tables.
-
-    private constant boolean TEST = true       // set to `true` to enable error messages and `print`/`toString` API.
+    private constant boolean TEST = false      // set to `true` to enable error messages and `print`/`toString` API.
     private constant boolean DEEP_TEST = false // set to `true` to enable informational messages.
 
     private keyword addKey
