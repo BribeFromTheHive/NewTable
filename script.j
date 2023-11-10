@@ -69,8 +69,9 @@ library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 
     | method has takes integer key returns boolean
     |     whether or not `key` has been assigned
     |
-    | method save takes integer key, Table value returns nothing
+    | method save takes integer key, Table value returns Table
     |     a new method to not just add the value to the Table, but to also track it.
+    |     Returns `this` Table, so `save` calls can be daisy-chained.
     |
 
     Multi-Dimensional Table operations (store nested Tables against integer keys):
@@ -92,7 +93,7 @@ library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 
     | method operator get takes handle key returns Tables
     |     Alias for `[]`
     |
-    | method operator store takes handle key, Table value returns nothing
+    | method operator store takes handle key, Table value returns Table
     |     Alias for `save`
     |
     | method forget takes handle key returns nothing
@@ -111,7 +112,7 @@ library Table /* made by Bribe, special thanks to Vexorian & Nestharus, version 
     | method operator read takes string key returns Table
     |     Alias for `[]`
     |
-    | method operator write takes string key, Table value returns nothing
+    | method operator write takes string key, Table value returns Table
     |     Alias for `save`
     |
     | method delete takes string key returns nothing
